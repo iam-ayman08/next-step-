@@ -906,4 +906,27 @@ class ApiService {
       description: 'Project document for $projectName'
     );
   }
+
+  // AI Methods
+  Future<Map<String, dynamic>> chatCompletion(List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+  }) async {
+    try {
+      final requestData = {
+        'messages': messages,
+        if (model != null) 'model': model,
+        if (maxTokens != null) 'max_tokens': maxTokens,
+        if (temperature != null) 'temperature': temperature,
+      };
+
+      final response = await _dio.post('/ai/chat/completions', data: requestData);
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception(
+        e.response?.data['detail'] ?? 'Failed to get AI completion',
+      );
+    }
+  }
 }

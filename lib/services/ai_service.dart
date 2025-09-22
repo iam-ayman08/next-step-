@@ -1,44 +1,32 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'api_service.dart';
 
 class AIService {
   static AIService? _instance;
 
-  // For security, the API key should be stored in environment variables
-  // or obtained from a secure key management service
-  final String _apiKey;
+  // For backwards compatibility, keep API key reference (though no longer used for Lightning API)
+  static const String openaiApiKey =
+      'd9601d2b-481b-494c-93e9-3e273eea4021/aymanmohamed1937/vision-model';
 
-  static const String _baseUrl = 'https://api.openai.com/v1';
-  static const String _model = 'gpt-4o-mini'; // Updated to more reliable model
-  static const int _maxRetries = 3;
-  static const Duration _timeout = Duration(seconds: 30);
+  AIService._();
 
-  static const String _openaiApiKey =
-      'your-openai-api-key-here'; // Replace with actual API key
-
-  // Public getter to access the API key constant
-  static String get openaiApiKey => _openaiApiKey;
-
-  AIService._(this._apiKey);
-
-  factory AIService(String apiKey) {
-    if (_instance == null || _instance!._apiKey != apiKey) {
-      _instance = AIService._(apiKey);
-    }
+  factory AIService([String? apiKey]) {
+    _instance ??= AIService._();
     return _instance!;
   }
 
   static Future<bool> initialize() async {
-    // Test connection during initialization
-    final aiService = AIService(_openaiApiKey);
-    final isConnected = await aiService.testConnection();
-
-    if (isConnected) {
+    // Test connection during initialization through backend
+    final apiService = ApiService();
+    try {
+      final response = await apiService.chatCompletion([
+        {'role': 'user', 'content': 'Hello'}
+      ], maxTokens: 10);
       debugPrint('AI service initialized and tested successfully');
       return true;
-    } else {
-      debugPrint('AI service initialization failed - API key may be invalid or service unavailable');
+    } catch (e) {
+      debugPrint('AI service initialization failed: $e');
       return false;
     }
   }
@@ -50,90 +38,29 @@ class AIService {
   }) async {
     debugPrint('Generating AI response for prompt: $prompt');
 
-    for (int attempt = 1; attempt <= _maxRetries; attempt++) {
-      try {
-        final response = await http
-            .post(
-              Uri.parse('$_baseUrl/chat/completions'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer $_apiKey',
-              },
-              body: jsonEncode({
-                'model': _model,
-                'messages': [
-                  {'role': 'user', 'content': prompt},
-                ],
-                'max_tokens': maxTokens,
-                'temperature': temperature,
-              }),
-            )
-            .timeout(_timeout);
+    final fullPrompt = 'You are an AI created to guide students. Help them with their educational and career goals, providing advice on studies, career planning, resume building, interviews, and professional development.\n\nUser: $prompt\n\nAssistant:';
 
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
+    try {
+      final apiService = ApiService();
+      final response = await apiService.chatCompletion([
+        {'role': 'user', 'content': fullPrompt}
+      ], maxTokens: maxTokens, temperature: temperature);
 
-          // Check if the response contains an error message
-          if (data.containsKey('error')) {
-            final error = data['error'];
-            final errorMessage =
-                error['message']?.toString() ?? 'Unknown API error';
+      final content = response['choices']?[0]?['message']?['content']
+          ?.toString()
+          .trim();
 
-            if (errorMessage.contains(
-              'The language model did not provide any assistant messages',
-            )) {
-              throw Exception(
-                'The AI service is temporarily unavailable. Please try again.',
-              );
-            }
-            throw Exception('OpenAI API Error: $errorMessage');
-          }
-
-          final content = data['choices']?[0]?['message']?['content']
-              ?.toString()
-              .trim();
-
-          if (content != null && content.isNotEmpty) {
-            debugPrint('AI response generated successfully');
-            return content;
-          } else {
-            // Handle empty content more gracefully
-            debugPrint('Received empty content from OpenAI API');
-            return 'I apologize, but I couldn\'t generate a response right now. Please try rephrasing your question.';
-          }
-        } else if (response.statusCode == 429) {
-          // Rate limit exceeded, wait before retry
-          if (attempt < _maxRetries) {
-            await Future.delayed(Duration(seconds: attempt * 2));
-            continue;
-          }
-          throw Exception('Rate limit exceeded. Please try again later.');
-        } else if (response.statusCode == 401) {
-          throw Exception('Invalid API key. Please check your OpenAI API key.');
-        } else if (response.statusCode == 400) {
-          // Bad request - often due to model issues or invalid parameters
-          final data = jsonDecode(response.body);
-          final error =
-              data['error']?['message'] ?? 'Bad request to AI service';
-          throw Exception('Request error: $error');
-        } else {
-          final data = jsonDecode(response.body);
-          final error = data['error']?['message'] ?? 'Unknown API error';
-          throw Exception('API Error: ${response.statusCode} - $error');
-        }
-      } catch (e) {
-        if (attempt == _maxRetries) {
-          debugPrint(
-            'AI response generation failed after $_maxRetries attempts: $e',
-          );
-          return 'Sorry, I encountered an error: $e. Please try again.';
-        }
-        // Wait before retry
-        await Future.delayed(Duration(seconds: attempt));
+      if (content != null && content.isNotEmpty) {
+        debugPrint('AI response generated successfully');
+        return content;
+      } else {
+        debugPrint('Received empty content from AI API');
+        return 'I apologize, but I couldn\'t generate a response right now. Please try rephrasing your question.';
       }
+    } catch (e) {
+      debugPrint('AI response generation failed: $e');
+      return 'Sorry, I encountered an error: ${e.toString()}. Please try again.';
     }
-
-    return 'Sorry, I was unable to generate a response. Please try again.';
   }
 
   Future<String> improveResume(

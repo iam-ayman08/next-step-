@@ -5,7 +5,8 @@ Main API router that includes all v1 endpoints
 from fastapi import APIRouter
 from app.api.api_v1.endpoints import (
     auth, users, applications, mentorship, profiles, scholarships,
-    projects, notifications, uploads, study_materials, research_collaborations
+    projects, notifications, uploads, study_materials, research_collaborations,
+    ai
 )
 
 # Create main API router
@@ -23,3 +24,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(uploads.router, prefix="/uploads", tags=["file uploads"])
 api_router.include_router(study_materials.router, prefix="/study-materials", tags=["study materials"])
 api_router.include_router(research_collaborations.router, prefix="/research-collaborations", tags=["research collaborations"])
+api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
